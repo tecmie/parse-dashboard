@@ -1,6 +1,8 @@
 # Parse Dashboard
 
-[![Build Status](https://img.shields.io/travis/ParsePlatform/parse-dashboard/master.svg?style=flat)](https://travis-ci.org/ParsePlatform/parse-dashboard)
+[![Greenkeeper badge](https://badges.greenkeeper.io/parse-community/parse-dashboard.svg)](https://greenkeeper.io/)
+
+[![Build Status](https://img.shields.io/travis/parse-community/parse-dashboard/master.svg?style=flat)](https://travis-ci.org/parse-community/parse-dashboard)
 [![npm version](https://img.shields.io/npm/v/parse-dashboard.svg?style=flat)](https://www.npmjs.com/package/parse-dashboard)
 
 Parse Dashboard is a standalone dashboard for managing your Parse apps. You can use it to manage your [Parse Server](https://github.com/ParsePlatform/parse-server) apps and your apps that are running on [Parse.com](https://Parse.com).
@@ -8,7 +10,12 @@ Parse Dashboard is a standalone dashboard for managing your Parse apps. You can 
 * [Getting Started](#getting-started)
 * [Local Installation](#local-installation)
   * [Configuring Parse Dashboard](#configuring-parse-dashboard)
+    * [File](#file)
+    * [Environment variables](#environment-variables)
+      * [Multiple apps](#multiple-apps)
+      * [Single app](#single-app)
   * [Managing Multiple Apps](#managing-multiple-apps)
+  * [App Icon Configuration](#app-icon-configuration)
   * [Other Configuration Options](#other-configuration-options)
 * [Running as Express Middleware](#running-as-express-middleware)
 * [Deploying Parse Dashboard](#deploying-parse-dashboard)
@@ -16,6 +23,11 @@ Parse Dashboard is a standalone dashboard for managing your Parse apps. You can 
   * [Security Considerations](#security-considerations)
     * [Configuring Basic Authentication](#configuring-basic-authentication)
     * [Separating App Access Based on User Identity](#separating-app-access-based-on-user-identity)
+  * [Use Read-Only masterKey](#use-read-only-masterKey)
+    * [Making an app read-only for all users](#making-an-app-read-only-for-all-users)
+    * [Makings users read-only](#makings-users-read-only)
+    * [Making user's apps readOnly](#making-users-apps-readonly)
+  * [Configuring Localized Push Notifications](#configuring-localized-push-notifications)
   * [Run with Docker](#run-with-docker)
 * [Contributing](#contributing)
 
@@ -100,7 +112,7 @@ Managing multiple apps from the same dashboard is also possible.  Simply add add
 
 You can manage self-hosted [Parse Server](https://github.com/ParsePlatform/parse-server) apps, *and* apps that are hosted on [Parse.com](http://parse.com/) from the same dashboard. In your config file, you will need to add the `restKey` and `javascriptKey` as well as the other paramaters, which you can find on `dashboard.parse.com`. Set the serverURL to `http://api.parse.com/1`:
 
-```js
+```json
 {
   "apps": [
     {
@@ -151,7 +163,7 @@ To change the app to production, simply set `production` to `true` in your confi
 
 Instead of starting Parse Dashboard with the CLI, you can also run it as an [express](https://github.com/expressjs/express) middleware.
 
-```
+```javascript
 var express = require('express');
 var ParseDashboard = require('parse-dashboard');
 
@@ -177,20 +189,20 @@ httpServer.listen(4040);
 
 If you want to run both [Parse Server](https://github.com/ParsePlatform/parse-server) and Parse Dashboard on the same server/port, you can run them both as express middleware:
 
-```
+```javascript
 var express = require('express');
 var ParseServer = require('parse-server').ParseServer;
 var ParseDashboard = require('parse-dashboard');
-
-var allowInsecureHTTP = false
 
 var api = new ParseServer({
 	// Parse Server settings
 });
 
+var options = { allowInsecureHTTP: false };
+
 var dashboard = new ParseDashboard({
 	// Parse Dashboard settings
-}, allowInsecureHTTP);
+}, options);
 
 var app = express();
 
@@ -215,7 +227,7 @@ In order to securely deploy the dashboard without leaking your apps master key, 
 
 The deployed dashboard detects if you are using a secure connection. If you are deploying the dashboard behind a load balancer or front-facing proxy, then the app won't be able to detect that the connection is secure. In this case, you can start the dashboard with the `--trustProxy=1` option (or set the PARSE_DASHBOARD_TRUST_PROXY config var to 1) to rely on the X-Forwarded-* headers for the client's connection security.  This is useful for hosting on services like Heroku, where you can trust the provided proxy headers to correctly determine whether you're using HTTP or HTTPS.  You can also turn on this setting when using the dashboard as [express](https://github.com/expressjs/express) middleware:
 
-```
+```javascript
 var trustProxy = true;
 var dashboard = new ParseDashboard({
   "apps": [
@@ -282,6 +294,132 @@ When `user1` logs in, he/she will be able to manage `myAppId1` and `myAppId2` fr
 
 When *`user2`*  logs in, he/she will only be able to manage *`myAppId1`* from the dashboard.
 
+## Use Read-Only masterKey
+
+Starting parse-server 2.6.5, it is possible to provide a `readOnlyMasterKey` to parse-server to prevent mutations on objects from a client.
+If you want to protect your dashboard with this feature, just use the `readOnlyMasterKey` instead of the `masterKey`. All write calls will fail.
+
+### Making an app read-only for all users
+
+Start your `parse-server` with
+
+```json
+{
+"masterKey": "YOUR_MASTER_KEY_HERE",
+"readOnlyMasterKey": "YOUR_READ_ONLY_MASTER_KEY",
+}
+```
+
+Then in your dashboard configuration:
+
+```javascript
+var trustProxy = true;
+var dashboard = new ParseDashboard({
+  "apps": [
+    {
+      "serverURL": "http://localhost:1337/parse",
+      "appId": "myAppId",
+      "masterKey": "YOUR_READ_ONLY_MASTER_KEY",
+      "appName": "MyApp"
+    }
+  ],
+  "trustProxy": 1
+});
+```
+
+### Makings users read-only
+
+Make sure you specify the `readOnlyMasterKey` for the apps that you want to use read-only feature in "apps" configuration.
+You can mark a user as a read-only user:
+
+```json
+{
+  "apps": [
+    {
+      "appId": "myAppId1",
+      "masterKey": "myMasterKey1",
+      "readOnlyMasterKey": "myReadOnlyMasterKey1",
+      "serverURL": "myURL1",      
+      "port": 4040,
+      "production": true
+    },
+    {
+      "appId": "myAppId2",
+      "masterKey": "myMasterKey2",
+      "readOnlyMasterKey": "myReadOnlyMasterKey2",
+      "serverURL": "myURL2",      
+      "port": 4041,
+      "production": true
+    }
+  ],
+  "users": [
+    {
+      "user":"user1",
+      "pass":"pass1",
+      "readOnly": true,
+      "apps": [{"appId": "myAppId1"}, {"appId": "myAppId2"}]
+    },
+    {
+      "user":"user2",
+      "pass":"pass2",
+      "apps": [{"appId": "myAppId1"}]
+    }
+  ]
+}
+```
+
+This way `user1` will have a readOnly access to `myAppId1` and `myAppId2`
+
+### Making user's apps readOnly
+
+Make sure you specify the `readOnlyMasterKey` for the apps that you want to use read-only feature in "apps" configuration.
+You can give read only access to a user on a per-app basis:
+
+```json
+{
+  "apps": [
+    {
+      "appId": "myAppId1",
+      "masterKey": "myMasterKey1",
+      "readOnlyMasterKey": "myReadOnlyMasterKey1",
+      "serverURL": "myURL",      
+      "port": 4040,
+      "production": true
+    },
+    {"...": "..."}
+  ],
+  "users": [
+    {
+      "user":"user",
+      "pass":"pass",
+      "apps": [{"appId": "myAppId", "readOnly": true}, {"appId": "myAppId2"}]
+    }
+  ]
+}
+```
+
+With this configuration, user1 will have read only access to `myAppId1` and read/write access to `myAppId2`.
+
+## Configuring Localized Push Notifications
+
+With the latest version of the [dashboard](https://www.npmjs.com/package/parse-dashboard), it is possible to send localized messages for push notifications.
+You can provide a list of locales or languages you want to support for your dashboard users.
+
+```json
+{
+  "apps": [
+    {
+      "serverURL": "http://localhost:1337/parse",
+      "appId": "myAppId",
+      "masterKey": "myMasterKey",
+      "appName": "My Parse Server App",
+      "iconName": "MyAppIcon.png",
+      "supportedPushLocales": ["en", "ru", "fr"]
+    }
+  ],
+  "iconsFolder": "icons"
+}
+```
 
 ## Run with Docker
 
@@ -310,3 +448,7 @@ If you are not familiar with Docker, ``--port 8080`` will be passed in as argume
 # Contributing
 
 We really want Parse to be yours, to see it grow and thrive in the open source community. Please see the [Contributing to Parse Dashboard guide](CONTRIBUTING.md).
+
+-----
+
+As of April 5, 2017, Parse, LLC has transferred this code to the parse-community organization, and will no longer be contributing to or distributing this code.

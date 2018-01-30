@@ -6,16 +6,13 @@
  * the root directory of this source tree.
  */
 import BrowserCell            from 'components/BrowserCell/BrowserCell.react';
-import * as ColumnPreferences from 'lib/ColumnPreferences';
 import * as browserUtils      from 'lib/browserUtils';
 import DataBrowserHeaderBar   from 'components/DataBrowserHeaderBar/DataBrowserHeaderBar.react';
-import DateTimeEditor         from 'components/DateTimeEditor/DateTimeEditor.react';
 import Editor                 from 'dashboard/Data/Browser/Editor.react';
 import EmptyState             from 'components/EmptyState/EmptyState.react';
 import Icon                   from 'components/Icon/Icon.react';
 import Parse                  from 'parse';
 import React                  from 'react';
-import StringEditor           from 'components/StringEditor/StringEditor.react';
 import styles                 from 'dashboard/Data/Browser/Browser.scss';
 import Button                 from 'components/Button/Button.react';
 
@@ -27,7 +24,7 @@ const READ_ONLY = [ 'objectId', 'createdAt', 'updatedAt' ];
 let scrolling = false;
 
 export default class BrowserTable extends React.Component {
-  constructor(props) {
+  constructor() {
     super();
 
     this.state = {
@@ -36,7 +33,7 @@ export default class BrowserTable extends React.Component {
     this.handleScroll = this.handleScroll.bind(this);
   }
 
-  componentWillReceiveProps(props, context) {
+  componentWillReceiveProps(props) {
     if (props.className !== this.props.className) {
       this.setState({
         offset: 0,
@@ -76,6 +73,7 @@ export default class BrowserTable extends React.Component {
       }
       if (this.state.offset !== offset) {
         this.setState({ offset });
+        this.refs.table.scrollTop = rowsAbove * ROW_HEIGHT;
       }
       if (this.props.maxFetched - offset < 100) {
         this.props.fetchNextPage();
@@ -143,7 +141,7 @@ export default class BrowserTable extends React.Component {
       }
     }
 
-    let headers = this.props.order.map(({ name, width }, i) => (
+    let headers = this.props.order.map(({ name, width }) => (
       {
         width: width,
         name: name,
@@ -203,7 +201,15 @@ export default class BrowserTable extends React.Component {
             value = '';
           } else if (type === 'Array') {
             if (value) {
-              value = value.map(val => val instanceof Parse.Object ? val.toPointer() : val);
+              value = value.map(val => {
+                  if (val instanceof Parse.Object) {
+                      return val.toPointer();
+                  } else if (typeof val.getMonth === 'function') {
+                      return { __type: "Date", iso: val.toISOString() };
+                  }
+
+                  return val;
+              });
             }
           }
           let wrapTop = Math.max(0, this.props.current.row * ROW_HEIGHT);
@@ -259,7 +265,7 @@ export default class BrowserTable extends React.Component {
         } else {
           addRow = (
             <div className={styles.addRow}>
-              <a onClick={this.props.onAddRow}>
+              <a title='Add Row' onClick={this.props.onAddRow}>
                 <Icon
                   name='plus-outline'
                   width={14}
